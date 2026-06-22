@@ -57,7 +57,7 @@ https://www.patreon.com/cw/foxtailtale
 
 или, если порадовать дяденьку, вот Itch моего проекта, можете через него задонатить мне.
 
-
+https://little-towel.itch.io/tfi-builder
 ---
 
 ## English
@@ -116,3 +116,5 @@ This tool was created for The Forgotten Island project. We'd all be thrilled if 
 https://www.patreon.com/cw/foxtailtale
 
 Or, if you'd like to make me happy, here's my project's Itch, you can donate to me through it:
+
+https://little-towel.itch.io/tfi-builder

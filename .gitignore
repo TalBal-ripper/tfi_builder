@@ -1,1 +1,8 @@
 /target
+/res/lib/nwjs-v0.102.0-linux-x64
+/res/lib/nwjs-v0.102.0-osx-x64
+/res/lib/openjdk
+/res/assets/app.icns
+/res/assets/document.icns
+/res/assets/package.json
+/res/assets/versions.txt
