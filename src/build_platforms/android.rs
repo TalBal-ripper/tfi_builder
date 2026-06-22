@@ -1,4 +1,3 @@
-// src/build_platforms/android.rs
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};

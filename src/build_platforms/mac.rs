@@ -1,4 +1,3 @@
-// src/build_platforms/mac.rs
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -116,15 +115,18 @@ impl MacBuilder {
         if zip_path.exists() {
             fs::remove_file(&zip_path)?;
         }
-        let status = Command::new("zip")
+
+        if cfg!(not(target_os = "windows")) {
+            let status = Command::new("zip")
             .args(["-q", "-r", "-y"])
             .arg(zip_path.file_name().unwrap())
             .arg(format!("{}.app", app_name))
             .current_dir(&mac_output)
             .status()?;
 
-        if !status.success() {
-            return Err(io::Error::new(io::ErrorKind::Other, "Failed to zip .app"));
+            if !status.success() {
+                return Err(io::Error::new(io::ErrorKind::Other, "Failed to zip .app"));
+            }
         }
 
         Ok(())

@@ -1,4 +1,3 @@
-// src/build_platforms/windows.rs
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
