@@ -1,11 +1,10 @@
-use eframe::egui::{self, Window, ComboBox};
+use eframe::egui::{self, Window};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use std::io::{self, Write};
 use std::thread;
-use std::sync::mpsc::{self, Sender, Receiver};
-use crate::locales::localisation::Localisation;
+use std::sync::mpsc::{self, Receiver};
 
 #[derive(PartialEq, Clone, Copy)]
 pub enum KeygenMode {
@@ -42,13 +41,11 @@ pub struct SetupWindow {
     pub dependencies_ready: bool,
     pub setup_status: SetupStatus,
 
-    // Для асинхронной загрузки
     status_receiver: Option<Receiver<SetupStatus>>,
-    loc: Localisation,
 }
 
 impl SetupWindow {
-    pub fn new(loc: Localisation) -> Self {
+    pub fn new() -> Self {
         let mut s = SetupWindow {
             show: false,
             mode: KeygenMode::Manual,
@@ -66,16 +63,10 @@ impl SetupWindow {
             dependencies_ready: false,
             setup_status: SetupStatus::Idle,
             status_receiver: None,
-            loc,
         };
         s.load_from_settings();
-        // Проверяем зависимости при запуске
         s.check_existing_dependencies();
         s
-    }
-
-    pub fn update_locale(&mut self, loc: Localisation) {
-        self.loc = loc;
     }
 
     fn check_existing_dependencies(&mut self) {
@@ -90,80 +81,75 @@ impl SetupWindow {
             && nwjs_macos.exists();
 
         if self.dependencies_ready {
-            self.status_message = self.loc.get_translate("all_dependencies_installed").clone();
+            self.status_message = "All dependencies installed.".to_string();
         }
     }
 
     pub fn check_and_setup_dependencies(&mut self) {
-        // Проверяем, не идет ли уже процесс
-        if matches!(self.setup_status, SetupStatus::Downloading(_) | SetupStatus::Extracting(_)) {
+        if matches!(
+            self.setup_status,
+            SetupStatus::Downloading(_) | SetupStatus::Extracting(_)
+        ) {
             return;
         }
 
         let (tx, rx) = mpsc::channel();
         self.status_receiver = Some(rx);
 
-        let loc_clone = self.loc.clone(); // Предполагаем, что Localisation реализует Clone
-
         thread::spawn(move || {
             let tx = tx.clone();
             let lib_dir = PathBuf::from("res").join("lib");
 
-            // Создаем директорию
             if let Err(e) = fs::create_dir_all(&lib_dir) {
-                tx.send(SetupStatus::Error(format!("{} {}",
-                    loc_clone.get_translate("dependencies_error"),
-                    e))).ok();
+                tx.send(SetupStatus::Error(format!(
+                    "Dependencies error: {}",
+                    e
+                )))
+                .ok();
                 return;
             }
 
-            // Определяем ОС для JDK
             let (jdk_url, jdk_archive_name, jdk_extract_name) = if cfg!(target_os = "windows") {
                 (
                     "https://builds.openlogic.com/downloadJDK/openlogic-openjdk/17.0.18+8/openlogic-openjdk-17.0.18+8-windows-x64.zip",
                     "openlogic-openjdk-17.0.18+8-windows-x64.zip",
-                    "openlogic-openjdk-17.0.18+8-windows-x64"
+                    "openlogic-openjdk-17.0.18+8-windows-x64",
                 )
             } else if cfg!(target_os = "linux") {
                 (
                     "https://builds.openlogic.com/downloadJDK/openlogic-openjdk/17.0.18+8/openlogic-openjdk-17.0.18+8-linux-x64.tar.gz",
                     "openlogic-openjdk-17.0.18+8-linux-x64.tar.gz",
-                    "openlogic-openjdk-17.0.18+8-linux-x64"
+                    "openlogic-openjdk-17.0.18+8-linux-x64",
                 )
             } else if cfg!(target_os = "macos") {
                 (
                     "https://builds.openlogic.com/downloadJDK/openlogic-openjdk/17.0.18+8/openlogic-openjdk-17.0.18+8-macos-x64.zip",
                     "openlogic-openjdk-17.0.18+8-macos-x64.zip",
-                    "openlogic-openjdk-17.0.18+8-macos-x64"
+                    "openlogic-openjdk-17.0.18+8-macos-x64",
                 )
             } else {
                 tx.send(SetupStatus::Error("Unsupported OS".to_string())).ok();
                 return;
             };
 
-            // Загружаем JDK
-            tx.send(SetupStatus::Downloading(format!("{} JDK...",
-                loc_clone.get_translate("downloading")))).ok();
+            tx.send(SetupStatus::Downloading("Downloading JDK...".to_string()))
+                .ok();
             let jdk_archive_path = lib_dir.join(jdk_archive_name);
 
             if let Err(e) = download_file(jdk_url, &jdk_archive_path) {
-                tx.send(SetupStatus::Error(format!("{} JDK: {}",
-                    loc_clone.get_translate("dependencies_error"),
-                    e))).ok();
+                tx.send(SetupStatus::Error(format!("Dependencies error JDK: {}", e)))
+                    .ok();
                 return;
             }
 
-            // Распаковываем JDK
-            tx.send(SetupStatus::Extracting(format!("{} JDK...",
-                loc_clone.get_translate("extracting")))).ok();
+            tx.send(SetupStatus::Extracting("Extracting JDK...".to_string()))
+                .ok();
             if let Err(e) = extract_archive(&jdk_archive_path, &lib_dir) {
-                tx.send(SetupStatus::Error(format!("{} JDK: {}",
-                    loc_clone.get_translate("dependencies_error"),
-                    e))).ok();
+                tx.send(SetupStatus::Error(format!("Dependencies error JDK: {}", e)))
+                    .ok();
                 return;
             }
 
-            // Перемещаем JDK в папку openjdk
             let jdk_dir = lib_dir.join("openjdk");
             let extracted_jdk_dir = lib_dir.join(jdk_extract_name);
 
@@ -172,68 +158,85 @@ impl SetupWindow {
                     let _ = fs::remove_dir_all(&jdk_dir);
                 }
                 if let Err(e) = fs::rename(&extracted_jdk_dir, &jdk_dir) {
-                    tx.send(SetupStatus::Error(format!("{} JDK: {}",
-                        loc_clone.get_translate("dependencies_error"),
-                        e))).ok();
+                    tx.send(SetupStatus::Error(format!(
+                        "Dependencies error JDK: {}",
+                        e
+                    )))
+                    .ok();
                     return;
                 }
             }
 
-            // Удаляем архив JDK
             let _ = fs::remove_file(&jdk_archive_path);
 
-            // Загружаем NW.js для Linux
+            // NW.js Linux
             let nwjs_linux_archive = "nwjs-v0.102.0-linux-x64.tar.gz";
             let nwjs_linux_url = "https://dl.nwjs.io/v0.102.0/nwjs-v0.102.0-linux-x64.tar.gz";
             let nwjs_linux_dir = lib_dir.join("nwjs-v0.102.0-linux-x64");
 
             if !nwjs_linux_dir.exists() {
-                tx.send(SetupStatus::Downloading(format!("{} NW.js Linux...",
-                    loc_clone.get_translate("downloading")))).ok();
+                tx.send(SetupStatus::Downloading(
+                    "Downloading NW.js Linux...".to_string(),
+                ))
+                .ok();
                 let nwjs_linux_path = lib_dir.join(nwjs_linux_archive);
 
                 if let Err(e) = download_file(nwjs_linux_url, &nwjs_linux_path) {
-                    tx.send(SetupStatus::Error(format!("{} NW.js Linux: {}",
-                        loc_clone.get_translate("dependencies_error"),
-                        e))).ok();
+                    tx.send(SetupStatus::Error(format!(
+                        "Dependencies error NW.js Linux: {}",
+                        e
+                    )))
+                    .ok();
                     return;
                 }
 
-                tx.send(SetupStatus::Extracting(format!("{} NW.js Linux...",
-                    loc_clone.get_translate("extracting")))).ok();
+                tx.send(SetupStatus::Extracting(
+                    "Extracting NW.js Linux...".to_string(),
+                ))
+                .ok();
                 if let Err(e) = extract_archive(&nwjs_linux_path, &lib_dir) {
-                    tx.send(SetupStatus::Error(format!("{} NW.js Linux: {}",
-                        loc_clone.get_translate("dependencies_error"),
-                        e))).ok();
+                    tx.send(SetupStatus::Error(format!(
+                        "Dependencies error NW.js Linux: {}",
+                        e
+                    )))
+                    .ok();
                     return;
                 }
 
                 let _ = fs::remove_file(&nwjs_linux_path);
             }
 
-            // Загружаем NW.js для macOS
+            // NW.js macOS
             let nwjs_macos_archive = "nwjs-v0.102.0-osx-x64.zip";
             let nwjs_macos_url = "https://dl.nwjs.io/v0.102.0/nwjs-v0.102.0-osx-x64.zip";
             let nwjs_macos_dir = lib_dir.join("nwjs-v0.102.0-osx-x64");
 
             if !nwjs_macos_dir.exists() {
-                tx.send(SetupStatus::Downloading(format!("{} NW.js macOS...",
-                    loc_clone.get_translate("downloading")))).ok();
+                tx.send(SetupStatus::Downloading(
+                    "Downloading NW.js macOS...".to_string(),
+                ))
+                .ok();
                 let nwjs_macos_path = lib_dir.join(nwjs_macos_archive);
 
                 if let Err(e) = download_file(nwjs_macos_url, &nwjs_macos_path) {
-                    tx.send(SetupStatus::Error(format!("{} NW.js macOS: {}",
-                        loc_clone.get_translate("dependencies_error"),
-                        e))).ok();
+                    tx.send(SetupStatus::Error(format!(
+                        "Dependencies error NW.js macOS: {}",
+                        e
+                    )))
+                    .ok();
                     return;
                 }
 
-                tx.send(SetupStatus::Extracting(format!("{} NW.js macOS...",
-                    loc_clone.get_translate("extracting")))).ok();
+                tx.send(SetupStatus::Extracting(
+                    "Extracting NW.js macOS...".to_string(),
+                ))
+                .ok();
                 if let Err(e) = extract_archive(&nwjs_macos_path, &lib_dir) {
-                    tx.send(SetupStatus::Error(format!("{} NW.js macOS: {}",
-                        loc_clone.get_translate("dependencies_error"),
-                        e))).ok();
+                    tx.send(SetupStatus::Error(format!(
+                        "Dependencies error NW.js macOS: {}",
+                        e
+                    )))
+                    .ok();
                     return;
                 }
 
@@ -241,8 +244,9 @@ impl SetupWindow {
             }
 
             tx.send(SetupStatus::Complete(
-                loc_clone.get_translate("all_dependencies_installed").clone()
-            )).ok();
+                "All dependencies installed.".to_string(),
+            ))
+            .ok();
         });
     }
 
@@ -250,10 +254,10 @@ impl SetupWindow {
         if let Some(receiver) = &self.status_receiver {
             if let Ok(status) = receiver.try_recv() {
                 match &status {
-                    SetupStatus::Downloading(msg) |
-                    SetupStatus::Extracting(msg) |
-                    SetupStatus::Complete(msg) |
-                    SetupStatus::Error(msg) => {
+                    SetupStatus::Downloading(msg)
+                    | SetupStatus::Extracting(msg)
+                    | SetupStatus::Complete(msg)
+                    | SetupStatus::Error(msg) => {
                         self.status_message = msg.clone();
                     }
                     SetupStatus::Idle | SetupStatus::Cleaning => {}
@@ -279,15 +283,15 @@ impl SetupWindow {
         for line in content.lines() {
             if let Some((key, value)) = line.split_once('=') {
                 match key {
-                    "key_alias"      => self.alias     = value.to_string(),
-                    "key_cn"         => self.cn         = value.to_string(),
-                    "key_ou"         => self.ou         = value.to_string(),
-                    "key_o"          => self.o          = value.to_string(),
-                    "key_l"          => self.l          = value.to_string(),
-                    "key_st"         => self.st         = value.to_string(),
-                    "key_c"          => self.c          = value.to_string(),
+                    "key_alias" => self.alias = value.to_string(),
+                    "key_cn" => self.cn = value.to_string(),
+                    "key_ou" => self.ou = value.to_string(),
+                    "key_o" => self.o = value.to_string(),
+                    "key_l" => self.l = value.to_string(),
+                    "key_st" => self.st = value.to_string(),
+                    "key_c" => self.c = value.to_string(),
                     "key_store_pass" => self.store_pass = value.to_string(),
-                    "key_pass"       => self.key_pass   = value.to_string(),
+                    "key_pass" => self.key_pass = value.to_string(),
                     _ => {}
                 }
             }
@@ -336,9 +340,10 @@ impl SetupWindow {
             .unwrap_or_default()
             .subsec_nanos();
 
-        let chars: Vec<char> = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-            .chars()
-            .collect();
+        let chars: Vec<char> =
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+                .chars()
+                .collect();
         let pass_chars: Vec<char> =
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%"
                 .chars()
@@ -363,20 +368,28 @@ impl SetupWindow {
                 .collect()
         };
 
-        self.alias      = rand_str(8,  seed);
-        self.cn         = rand_str(12, seed.wrapping_add(1));
-        self.ou         = rand_str(8,  seed.wrapping_add(2));
-        self.o          = rand_str(8,  seed.wrapping_add(3));
-        self.l          = rand_str(6,  seed.wrapping_add(4));
-        self.st         = rand_str(6,  seed.wrapping_add(5));
-        self.c          = rand_str(2,  seed.wrapping_add(6));
+        self.alias = rand_str(8, seed);
+        self.cn = rand_str(12, seed.wrapping_add(1));
+        self.ou = rand_str(8, seed.wrapping_add(2));
+        self.o = rand_str(8, seed.wrapping_add(3));
+        self.l = rand_str(6, seed.wrapping_add(4));
+        self.st = rand_str(6, seed.wrapping_add(5));
+        self.c = rand_str(2, seed.wrapping_add(6));
         self.store_pass = rand_pass(16, seed.wrapping_add(7));
-        self.key_pass   = self.store_pass.clone();
+        self.key_pass = self.store_pass.clone();
     }
 
     fn keytool_path() -> PathBuf {
-        let bin = if cfg!(target_os = "windows") { "keytool.exe" } else { "keytool" };
-        PathBuf::from("res").join("lib").join("openjdk").join("bin").join(bin)
+        let bin = if cfg!(target_os = "windows") {
+            "keytool.exe"
+        } else {
+            "keytool"
+        };
+        PathBuf::from("res")
+            .join("lib")
+            .join("openjdk")
+            .join("bin")
+            .join(bin)
     }
 
     fn keystore_path() -> PathBuf {
@@ -387,9 +400,7 @@ impl SetupWindow {
         let keystore = Self::keystore_path();
         if keystore.exists() {
             if let Err(e) = fs::remove_file(&keystore) {
-                self.status_message = format!("{} {}",
-                    self.loc.get_translate("failed_remove_old_key"),
-                    e);
+                self.status_message = format!("Failed to remove old key: {}", e);
                 return;
             }
         }
@@ -401,37 +412,42 @@ impl SetupWindow {
 
         let status = Command::new(Self::keytool_path())
             .arg("-genkeypair")
-            .arg("-alias").arg(&self.alias)
-            .arg("-keyalg").arg("RSA")
-            .arg("-keysize").arg("2048")
-            .arg("-sigalg").arg("SHA256withRSA")
-            .arg("-keystore").arg(&keystore)
-            .arg("-validity").arg("99999")
-            .arg("-storepass").arg(&self.store_pass)
-            .arg("-dname").arg(&dname)
+            .arg("-alias")
+            .arg(&self.alias)
+            .arg("-keyalg")
+            .arg("RSA")
+            .arg("-keysize")
+            .arg("2048")
+            .arg("-sigalg")
+            .arg("SHA256withRSA")
+            .arg("-keystore")
+            .arg(&keystore)
+            .arg("-validity")
+            .arg("99999")
+            .arg("-storepass")
+            .arg(&self.store_pass)
+            .arg("-dname")
+            .arg(&dname)
             .status();
 
         match status {
             Ok(s) if s.success() => {
                 self.key_pass = self.store_pass.clone();
                 self.key_generated = true;
-                self.status_message = self.loc.get_translate("key_created_successfully").clone();
+                self.status_message = "Key created successfully.".to_string();
                 if let Err(e) = self.save_to_settings() {
-                    self.status_message += &format!("\n{} {}",
-                        self.loc.get_translate("settings_save_failed"),
-                        e);
+                    self.status_message += &format!("\nSettings save failed: {}", e);
                 }
             }
             Ok(s) => {
-                self.status_message = format!("{} {}",
-                    self.loc.get_translate("key_creation_failed"),
-                    s);
+                self.status_message = format!("Key creation failed: {}", s);
             }
             Err(e) => {
-                self.status_message = format!("{} ({}): {}",
-                    self.loc.get_translate("keytool_not_found"),
+                self.status_message = format!(
+                    "keytool not found ({}): {}",
                     Self::keytool_path().display(),
-                    e);
+                    e
+                );
             }
         }
     }
@@ -441,27 +457,28 @@ impl SetupWindow {
             return;
         }
 
-        // Обновляем статус из фонового потока
         self.update_status();
 
         let mut open = self.show;
-        Window::new(self.loc.get_translate("setup_title"))
+        Window::new("Setup")
             .open(&mut open)
             .resizable(true)
             .default_size([600.0, 700.0])
             .vscroll(true)
             .show(ctx, |ui| {
-                // Секция установки зависимостей
-                ui.heading(self.loc.get_translate("dependencies_section"));
-                ui.label(self.loc.get_translate("dependencies_description"));
+                ui.heading("Dependencies");
+                ui.label("Install required dependencies (JDK, NW.js for Linux/macOS).");
 
-                let is_busy = matches!(self.setup_status, SetupStatus::Downloading(_) | SetupStatus::Extracting(_));
+                let is_busy = matches!(
+                    self.setup_status,
+                    SetupStatus::Downloading(_) | SetupStatus::Extracting(_)
+                );
 
                 ui.horizontal(|ui| {
                     let button_text = if is_busy {
-                        self.loc.get_translate("installing")
+                        "Installing..."
                     } else {
-                        self.loc.get_translate("install_dependencies")
+                        "Install dependencies"
                     };
 
                     let button = ui.add_enabled(!is_busy, egui::Button::new(button_text));
@@ -471,11 +488,10 @@ impl SetupWindow {
                     }
                 });
 
-                // Показываем прогресс
                 match &self.setup_status {
                     SetupStatus::Idle => {
                         if !self.dependencies_ready {
-                            ui.label(self.loc.get_translate("press_to_install"));
+                            ui.label("Press to install.");
                         }
                     }
                     SetupStatus::Downloading(msg) => {
@@ -487,7 +503,7 @@ impl SetupWindow {
                         ui.add(egui::Spinner::new());
                     }
                     SetupStatus::Cleaning => {
-                        ui.label(self.loc.get_translate("cleaning"));
+                        ui.label("Cleaning...");
                         ui.add(egui::Spinner::new());
                     }
                     SetupStatus::Complete(msg) => {
@@ -500,74 +516,83 @@ impl SetupWindow {
 
                 ui.separator();
 
-                ui.heading(self.loc.get_translate("key_section"));
-                ui.label(self.loc.get_translate("key_generation_method"));
+                ui.heading("Key");
+                ui.label("Key generation method");
                 ui.horizontal(|ui| {
-                    if ui.radio_value(&mut self.mode, KeygenMode::Auto, self.loc.get_translate("auto_mode")).changed() {
+                    if ui
+                        .radio_value(&mut self.mode, KeygenMode::Auto, "Auto")
+                        .changed()
+                    {
                         self.fill_random();
                     };
-                    ui.radio_value(&mut self.mode, KeygenMode::Manual, self.loc.get_translate("manual_mode"));
+                    ui.radio_value(&mut self.mode, KeygenMode::Manual, "Manual");
                 });
                 ui.separator();
 
                 match self.mode {
                     KeygenMode::Auto => {
-                        ui.label(self.loc.get_translate("fill_random_values"));
+                        ui.label("Random values:");
                         ui.add_space(4.0);
-                        egui::Grid::new("auto_grid").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
-                            for (label, val) in [
-                                (self.loc.get_translate("alias_field"), &self.alias),
-                                (self.loc.get_translate("cn_field"), &self.cn),
-                                (self.loc.get_translate("ou_field"), &self.ou),
-                                (self.loc.get_translate("o_field"), &self.o),
-                                (self.loc.get_translate("l_field"), &self.l),
-                                (self.loc.get_translate("st_field"), &self.st),
-                                (self.loc.get_translate("c_field"), &self.c),
-                                (self.loc.get_translate("store_pass_field"), &self.store_pass),
-                                (self.loc.get_translate("key_pass_field"), &self.key_pass),
-                            ] {
-                                ui.label(label);
-                                ui.label(val);
-                                ui.end_row();
-                            }
-                        });
+                        egui::Grid::new("auto_grid")
+                            .num_columns(2)
+                            .spacing([8.0, 4.0])
+                            .show(ui, |ui| {
+                                for (label, val) in [
+                                    ("Alias", &self.alias),
+                                    ("CN", &self.cn),
+                                    ("OU", &self.ou),
+                                    ("O", &self.o),
+                                    ("L", &self.l),
+                                    ("ST", &self.st),
+                                    ("C", &self.c),
+                                    ("Store pass", &self.store_pass),
+                                    ("Key pass", &self.key_pass),
+                                ] {
+                                    ui.label(label);
+                                    ui.label(val);
+                                    ui.end_row();
+                                }
+                            });
                     }
                     KeygenMode::Manual => {
-                        egui::Grid::new("manual_grid").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
-                            ui.label(self.loc.get_translate("alias_field"));
-                            ui.text_edit_singleline(&mut self.alias);
-                            ui.end_row();
+                        egui::Grid::new("manual_grid")
+                            .num_columns(2)
+                            .spacing([8.0, 4.0])
+                            .show(ui, |ui| {
+                                ui.label("Alias");
+                                ui.text_edit_singleline(&mut self.alias);
+                                ui.end_row();
 
-                            ui.label(self.loc.get_translate("cn_field"));
-                            ui.text_edit_singleline(&mut self.cn);
-                            ui.end_row();
+                                ui.label("CN");
+                                ui.text_edit_singleline(&mut self.cn);
+                                ui.end_row();
 
-                            ui.label(self.loc.get_translate("ou_field"));
-                            ui.text_edit_singleline(&mut self.ou);
-                            ui.end_row();
+                                ui.label("OU");
+                                ui.text_edit_singleline(&mut self.ou);
+                                ui.end_row();
 
-                            ui.label(self.loc.get_translate("o_field"));
-                            ui.text_edit_singleline(&mut self.o);
-                            ui.end_row();
+                                ui.label("O");
+                                ui.text_edit_singleline(&mut self.o);
+                                ui.end_row();
 
-                            ui.label(self.loc.get_translate("l_field"));
-                            ui.text_edit_singleline(&mut self.l);
-                            ui.end_row();
+                                ui.label("L");
+                                ui.text_edit_singleline(&mut self.l);
+                                ui.end_row();
 
-                            ui.label(self.loc.get_translate("st_field"));
-                            ui.text_edit_singleline(&mut self.st);
-                            ui.end_row();
+                                ui.label("ST");
+                                ui.text_edit_singleline(&mut self.st);
+                                ui.end_row();
 
-                            ui.label(self.loc.get_translate("c_field"));
-                            ui.text_edit_singleline(&mut self.c);
-                            ui.end_row();
+                                ui.label("C");
+                                ui.text_edit_singleline(&mut self.c);
+                                ui.end_row();
 
-                            ui.label(self.loc.get_translate("password_field"));
-                            if ui.text_edit_singleline(&mut self.store_pass).changed() {
-                                self.key_pass = self.store_pass.clone();
-                            }
-                            ui.end_row();
-                        });
+                                ui.label("Password");
+                                if ui.text_edit_singleline(&mut self.store_pass).changed() {
+                                    self.key_pass = self.store_pass.clone();
+                                }
+                                ui.end_row();
+                            });
                     }
                 }
 
@@ -580,41 +605,48 @@ impl SetupWindow {
                     && self.dependencies_ready;
 
                 ui.add_enabled_ui(fields_filled, |ui| {
-                    if ui.button(self.loc.get_translate("create_key")).clicked() {
+                    if ui.button("Create key").clicked() {
                         self.run_keytool();
                     }
                 });
 
                 if !self.dependencies_ready {
-                    ui.colored_label(egui::Color32::YELLOW, self.loc.get_translate("install_dependencies_first"));
+                    ui.colored_label(
+                        egui::Color32::YELLOW,
+                        "Install dependencies first.",
+                    );
                 } else if !fields_filled {
-                    ui.label(self.loc.get_translate("fill_all_fields"));
+                    ui.label("Fill all fields.");
                 }
 
-                if !self.status_message.is_empty() && !matches!(self.setup_status, SetupStatus::Downloading(_) | SetupStatus::Extracting(_)) {
+                if !self.status_message.is_empty()
+                    && !matches!(
+                        self.setup_status,
+                        SetupStatus::Downloading(_) | SetupStatus::Extracting(_)
+                    )
+                {
                     ui.separator();
                     ui.label(&self.status_message);
                 }
 
                 if self.key_generated {
                     ui.separator();
-                    ui.label(format!("{} {}", self.loc.get_translate("keystore_path_label"), Self::keystore_path().display()));
+                    ui.label(format!("Keystore path: {}", Self::keystore_path().display()));
                 }
             });
         self.show = open;
     }
 }
 
-// Вспомогательные функции для загрузки и распаковки
 fn download_file(url: &str, path: &PathBuf) -> Result<(), String> {
     let response = reqwest::blocking::get(url)
         .map_err(|e| format!("HTTP request error: {}", e))?;
 
-    let bytes = response.bytes()
+    let bytes = response
+        .bytes()
         .map_err(|e| format!("Error reading response: {}", e))?;
 
-    let mut file = fs::File::create(path)
-        .map_err(|e| format!("Error creating file: {}", e))?;
+    let mut file = fs::File::create(path).map_err(|e| format!("Error creating file: {}", e))?;
 
     file.write_all(&bytes)
         .map_err(|e| format!("Error writing file: {}", e))?;
@@ -641,8 +673,11 @@ fn extract_archive(archive_path: &PathBuf, output_dir: &PathBuf) -> Result<(), S
         let output = if cfg!(target_os = "windows") {
             Command::new("powershell")
                 .arg("-Command")
-                .arg(format!("Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
-                    archive_path.display(), output_dir.display()))
+                .arg(format!(
+                    "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
+                    archive_path.display(),
+                    output_dir.display()
+                ))
                 .output()
                 .map_err(|e| format!("Error running PowerShell: {}", e))?
         } else {
