@@ -28,28 +28,16 @@
 # direct methods
 .method constructor <init>(Landroid/support/v4/os/ResultReceiver;ILandroid/os/Bundle;)V
     .locals 0
-    .annotation system Ldalvik/annotation/MethodParameters;
-        accessFlags = {
-            0x8010,
-            0x0,
-            0x0
-        }
-        names = {
-            null,
-            null,
-            null
-        }
-    .end annotation
 
-    .line 56
+    .line 53
     iput-object p1, p0, Landroid/support/v4/os/ResultReceiver$MyRunnable;->this$0:Landroid/support/v4/os/ResultReceiver;
 
     invoke-direct {p0}, Ljava/lang/Object;-><init>()V
 
-    .line 57
+    .line 54
     iput p2, p0, Landroid/support/v4/os/ResultReceiver$MyRunnable;->mResultCode:I
 
-    .line 58
+    .line 55
     iput-object p3, p0, Landroid/support/v4/os/ResultReceiver$MyRunnable;->mResultData:Landroid/os/Bundle;
 
     return-void
@@ -60,7 +48,7 @@
 .method public run()V
     .locals 3
 
-    .line 63
+    .line 60
     iget-object v0, p0, Landroid/support/v4/os/ResultReceiver$MyRunnable;->this$0:Landroid/support/v4/os/ResultReceiver;
 
     iget v1, p0, Landroid/support/v4/os/ResultReceiver$MyRunnable;->mResultCode:I

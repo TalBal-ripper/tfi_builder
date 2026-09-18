@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="quit_message">
+        <item>Do you wish to quit $1?</item>
+        <item>Any unsaved progress will be lost.</item>
+    </string-array>
+</resources>

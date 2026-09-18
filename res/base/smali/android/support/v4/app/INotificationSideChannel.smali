@@ -9,36 +9,9 @@
 # annotations
 .annotation system Ldalvik/annotation/MemberClasses;
     value = {
-        Landroid/support/v4/app/INotificationSideChannel$_Parcel;,
-        Landroid/support/v4/app/INotificationSideChannel$Stub;,
-        Landroid/support/v4/app/INotificationSideChannel$Default;
+        Landroid/support/v4/app/INotificationSideChannel$Stub;
     }
 .end annotation
-
-
-# static fields
-.field public static final DESCRIPTOR:Ljava/lang/String;
-
-
-# direct methods
-.method static constructor <clinit>()V
-    .locals 3
-
-    const/16 v0, 0x24
-
-    const/16 v1, 0x2e
-
-    .line 176
-    const-string v2, "android$support$v4$app$INotificationSideChannel"
-
-    invoke-virtual {v2, v0, v1}, Ljava/lang/String;->replace(CC)Ljava/lang/String;
-
-    move-result-object v0
-
-    sput-object v0, Landroid/support/v4/app/INotificationSideChannel;->DESCRIPTOR:Ljava/lang/String;
-
-    return-void
-.end method
 
 
 # virtual methods

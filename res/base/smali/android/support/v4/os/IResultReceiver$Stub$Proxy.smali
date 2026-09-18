@@ -25,10 +25,10 @@
 .method constructor <init>(Landroid/os/IBinder;)V
     .locals 0
 
-    .line 80
+    .line 68
     invoke-direct {p0}, Ljava/lang/Object;-><init>()V
 
-    .line 81
+    .line 69
     iput-object p1, p0, Landroid/support/v4/os/IResultReceiver$Stub$Proxy;->mRemote:Landroid/os/IBinder;
 
     return-void
@@ -39,7 +39,7 @@
 .method public asBinder()Landroid/os/IBinder;
     .locals 1
 
-    .line 85
+    .line 73
     iget-object v0, p0, Landroid/support/v4/os/IResultReceiver$Stub$Proxy;->mRemote:Landroid/os/IBinder;
 
     return-object v0
@@ -48,8 +48,7 @@
 .method public getInterfaceDescriptor()Ljava/lang/String;
     .locals 1
 
-    .line 89
-    sget-object v0, Landroid/support/v4/os/IResultReceiver$Stub$Proxy;->DESCRIPTOR:Ljava/lang/String;
+    const-string v0, "android.support.v4.os.IResultReceiver"
 
     return-object v0
 .end method
@@ -62,37 +61,49 @@
         }
     .end annotation
 
-    .line 93
+    .line 81
     invoke-static {}, Landroid/os/Parcel;->obtain()Landroid/os/Parcel;
 
     move-result-object v0
 
-    .line 95
     :try_start_0
-    sget-object v1, Landroid/support/v4/os/IResultReceiver$Stub$Proxy;->DESCRIPTOR:Ljava/lang/String;
+    const-string v1, "android.support.v4.os.IResultReceiver"
 
+    .line 83
     invoke-virtual {v0, v1}, Landroid/os/Parcel;->writeInterfaceToken(Ljava/lang/String;)V
 
-    .line 96
+    .line 84
     invoke-virtual {v0, p1}, Landroid/os/Parcel;->writeInt(I)V
 
     const/4 p1, 0x0
 
-    .line 97
-    invoke-static {v0, p2, p1}, Landroid/support/v4/os/IResultReceiver$_Parcel;->access$100(Landroid/os/Parcel;Landroid/os/Parcelable;I)V
+    const/4 v1, 0x1
 
-    .line 98
+    if-eqz p2, :cond_0
+
+    .line 86
+    invoke-virtual {v0, v1}, Landroid/os/Parcel;->writeInt(I)V
+
+    .line 87
+    invoke-virtual {p2, v0, p1}, Landroid/os/Bundle;->writeToParcel(Landroid/os/Parcel;I)V
+
+    goto :goto_0
+
+    .line 90
+    :cond_0
+    invoke-virtual {v0, p1}, Landroid/os/Parcel;->writeInt(I)V
+
+    .line 92
+    :goto_0
     iget-object p1, p0, Landroid/support/v4/os/IResultReceiver$Stub$Proxy;->mRemote:Landroid/os/IBinder;
 
     const/4 p2, 0x0
-
-    const/4 v1, 0x1
 
     invoke-interface {p1, v1, v0, p2, v1}, Landroid/os/IBinder;->transact(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z
     :try_end_0
     .catchall {:try_start_0 .. :try_end_0} :catchall_0
 
-    .line 101
+    .line 95
     invoke-virtual {v0}, Landroid/os/Parcel;->recycle()V
 
     return-void
@@ -102,6 +113,5 @@
 
     invoke-virtual {v0}, Landroid/os/Parcel;->recycle()V
 
-    .line 102
     throw p1
 .end method
